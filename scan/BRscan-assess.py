@@ -165,7 +165,7 @@ def find_ledger(explicit, roots):
     return None, None
 
 def load_entries_flexible(path):
-    """宽容读取 dirScan.json：兼容 golin 并发写叠出的多文档/局部损坏；去重；剔除金丝雀路径"""
+    """宽容读取 dirScan.json：兼容 golin 并发写叠出的多文档/局部损坏；去重；剔除探针路径"""
     if not os.path.exists(path):
         return []
     raw = open(path, encoding="utf-8", errors="replace").read()

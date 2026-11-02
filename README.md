@@ -11,7 +11,7 @@ BRscan/
 ├── scan/                        # 扫描工具
 │   ├── BRscan-fastscan.sh       # golin 全端口扫描提速封装（--time 2 --chan 3.0 --done 2）
 │   ├── BRscan-alive-probe.py    # 扫描前存活预筛（ping + TCP 双重复核）
-│   ├── BRscan-dirsearch.py      # 目录探测接续驱动（金丝雀拦 soft-404 / 原子修复竞态 / 双轮补扫）
+│   ├── BRscan-dirsearch.py      # 目录探测接续驱动（随机探针拦 soft-404 / 原子写回去重 / 双轮补漏）
 │   ├── BRscan-assess.py         # 扫描报告 → 测评结论表 xlsx（确定值策略包）
 │   └── dict/
 │       ├── dir-dict.txt         # 目录探测精编字典（400 条，四主题）
@@ -63,9 +63,9 @@ python3 scan/BRscan-alive-probe.py 192.168.1.0/24 > alive.txt
 
 读 golin 扫描报告的站点清单 → 逐站跑 dirsearch → `dirScan.json` 回灌测评脚本。三道可靠性措施：
 
-1. **金丝雀预检**：每站先发 3 条随机路径，随机路径也命中 = 通配响应（soft-404），标记跳过不进证据；
-2. **每站原子修复**：治 golin 并发写 `dirScan.json` 的竞态叠写/丢条；
-3. **双轮复扫**：第 2 轮补回第 1 轮竞态丢掉的条目。
+1. **随机探针校验**：每站先发 3 条随机路径做探针，随机路径也命中 = 通配响应（soft-404），标记跳过不进证据；
+2. **原子写回去重**：每站跑完立即解析 → 去重 → 原子写回，治 golin 并发写 `dirScan.json` 的竞态叠写/丢条；
+3. **双轮补漏**：第 2 轮补回第 1 轮竞态丢掉的条目。
 
 实测：136 站 **11.9 分钟**，自动剔除误报 **594 条**、有效命中 108。
 

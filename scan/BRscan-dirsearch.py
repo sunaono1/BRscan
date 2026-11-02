@@ -9,12 +9,12 @@
     跑完重跑 BRscan-assess.py，6.2-1 / 6.4-2 / 6.5-1 / 6.5-2 自动转确定值。
 
 三道可靠性措施（治 golin dirsearch 三个坑）:
-    ① 金丝雀预检: 每站先用本脚本自己发 3 条随机路径；若随机路径也命中状态码集
+    ① 随机探针校验: 每站先用本脚本自己发 3 条随机路径；若随机路径也命中状态码集
        → 该站为通配响应(soft-404，如 MinIO/SPA 任意路径都回 403/200) → 标记跳过，
        其响应不进证据（否则目录类条目会被灌成假"不符合"）。
-    ② 每站原子修复: golin 并发命中时读改写 dirScan.json 会竞态叠写/丢条（上游行为），
-       每站跑完立即宽容解析 → 去重 → 原子回写（金丝雀路径剔除）。
-    ③ 双轮复扫: --passes 2（默认）整表扫两遍，第 2 轮补回第 1 轮竞态丢掉的条目。
+    ② 原子写回去重: golin 并发命中时读改写 dirScan.json 会竞态叠写/丢条（上游行为），
+       每站跑完立即宽容解析 → 去重 → 原子回写（探针路径剔除）。
+    ③ 双轮补漏: --passes 2（默认）整表扫两遍，第 2 轮补回第 1 轮竞态丢掉的条目。
 
 用法:
     python3 BRscan-dirsearch.py <golin报告.xlsx> [选项]
@@ -25,7 +25,7 @@
     --code LIST      状态码过滤（默认 200,301,302,403,500，同表C 第 10 条）
     --chan N         每站并发（默认 50，同表C 第 10 条）
     --timeout N      单请求超时秒（默认 3，同 golin 默认）
-    --passes N       整表轮数（默认 2，补竞态丢失；金丝雀站跳过不重跑）
+    --passes N       整表轮数（默认 2，补竞态丢失；探针判通配站跳过不重跑）
     --max N          每轮最多跑 N 个站点（调试/分批）
     --include REG    只跑 URL 匹配正则的站点
     --force          不跳过清单已完成站（默认断点续跑；通配站始终跳过）
@@ -46,7 +46,7 @@ CANARY_MARK = "/dsh-canary-"
 
 # ---------------------------------------------------------------- 宽容解析 + 修复（共享逻辑）
 def load_entries_flexible(path):
-    """宽容读取 dirScan.json：兼容叠写/多文档/局部损坏；去重；剔除金丝雀路径"""
+    """宽容读取 dirScan.json：兼容叠写/多文档/局部损坏；去重；剔除探针路径"""
     if not os.path.exists(path):
         return []
     raw = open(path, encoding="utf-8", errors="replace").read()
@@ -137,7 +137,7 @@ def canary_check(url, codes, timeout):
     return wildcard, got, inconclusive
 
 def homo_weak(hits):
-    """命中 ≥30 且 (Code, ContentType) 同一组合占 ≥95% → 高度同质（疑似通配，配合金丝雀无法判定时兜底）"""
+    """命中 ≥30 且 (Code, ContentType) 同一组合占 ≥95% → 高度同质（疑似通配，配合探针无法判定时兜底）"""
     if len(hits) < 30:
         return False
     from collections import Counter
@@ -167,7 +167,7 @@ def main():
     ap.add_argument("--include", default=None)
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--recanary", action="store_true",
-                    help="只对清单里已判非通配的站重跑金丝雀（修复旧 bug 漏判），命中通配则原地剔除其条目后退出")
+                    help="只对清单里已判非通配的站重跑探针（修复旧 bug 漏判），命中通配则原地剔除其条目后退出")
     ap.add_argument("--out-dir", default=None)
     ap.add_argument("--golin", default=DEFAULT_GOLIN)
     ap.add_argument("--delay", type=float, default=0.3)
@@ -189,12 +189,12 @@ def main():
     dirscan_path = os.path.join(out_dir, "dirScan.json")
     dict_paths = 0 if args.builtin else sum(1 for l in open(args.dict_path, encoding="utf-8") if l.strip())
 
-    # ---- --recanary: 原地修复旧版金丝雀漏判（HTTPS context bug），不跑字典
+    # ---- --recanary: 原地修复旧版探针漏判（HTTPS context bug），不跑字典
     if args.recanary:
         manifest = load_json(manifest_path, {"targets": []})
         recs = {t["url"]: t for t in manifest.get("targets", [])}
         flagged = pruned_total = inc_n = 0
-        print(f"[--recanary] 复检清单 {len(recs)} 站金丝雀（修复 HTTPS 金丝雀静默失败）…")
+        print(f"[--recanary] 复检清单 {len(recs)} 站探针（修复 HTTPS 探针静默失败）…")
         for url in [u for u, r in recs.items() if not r.get("wildcard")]:
             wild, got, inc = canary_check(url, codes, args.timeout)
             r = recs[url]
@@ -217,12 +217,12 @@ def main():
         manifest["pruned_total"] = int(manifest.get("pruned_total") or 0) + pruned_total
         manifest["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
         json.dump(manifest, open(manifest_path, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-        print(f"[--recanary 完成] 新判通配 {flagged} 站，剔除 {pruned_total} 条；金丝雀无法判定 {inc_n} 站（后续跑字典时启用同质兜底）")
+        print(f"[--recanary 完成] 新判通配 {flagged} 站，剔除 {pruned_total} 条；探针无法判定 {inc_n} 站（后续跑字典时启用同质兜底）")
         print("下一步: 重跑 BRscan-assess.py")
         return
 
 
-    print(f"Web 站点: 共 {len(targets)} 个 | 轮数 {args.passes} | 金丝雀通配站跳过 | 断点续跑 {'关(--force)' if args.force else '开'}")
+    print(f"Web 站点: 共 {len(targets)} 个 | 轮数 {args.passes} | 探针通配站跳过 | 断点续跑 {'关(--force)' if args.force else '开'}")
     print(f"字典    : {'golin 内置 31094 条（--builtin）' if args.builtin else f'{args.dict_path}（{dict_paths} 条）'}"
           f" | 状态码 {args.code} | 并发 {args.chan} | 超时 {args.timeout}s")
     print(f"落盘    : {out_dir}/dirScan.json + dirscan_manifest.json")
@@ -252,7 +252,7 @@ def main():
             break
         print(f"[第 {p}/{args.passes} 轮] 待跑 {len(todo)} 站 …")
         for i, url in enumerate(todo, 1):
-            # ---- ① 金丝雀预检（本脚本自发, 不经过 golin, 不写任何文件）
+            # ---- ① 随机探针校验（本脚本自发, 不经过 golin, 不写任何文件）
             wild, can_codes, inc = canary_check(url, codes, args.timeout)
             manifest = load_json(manifest_path, {"targets": []})
             recs = {t["url"]: t for t in manifest.get("targets", [])}
@@ -264,7 +264,7 @@ def main():
                             "canary_inconclusive": False,
                             "pass": p, "secs": 0.0, "at": datetime.datetime.now().isoformat(timespec="seconds")})
                 recs[url] = rec
-                print(f"[{i}/{len(todo)}] {url}  ⚠ 通配响应(soft-404) 金丝雀={can_codes} → 标记跳过，响应不进证据")
+                print(f"[{i}/{len(todo)}] {url}  ⚠ 通配响应(soft-404) 探针={can_codes} → 标记跳过，响应不进证据")
             else:
                 cmd = [args.golin, "dirsearch", "--url", url, "--code", args.code,
                        "--chan", str(args.chan), "--timeout", str(args.timeout)]
@@ -276,10 +276,10 @@ def main():
                 with open(log_path, "a", encoding="utf-8") as sink:
                     proc = subprocess.run(cmd, cwd=out_dir, stdout=sink, stderr=subprocess.STDOUT)
                 secs = time.time() - t0
-                # ---- ② 每站原子修复: 宽容解析 → 去重 → 原子回写
+                # ---- ② 原子写回去重: 宽容解析 → 去重 → 原子回写
                 entries = repair_dirscan(dirscan_path)
                 hits_here = [e for e in entries if str(e.get("Url", "")).startswith(url)]
-                # ---- ②b 同质兜底: 金丝雀无法判定(TLS/连不通) 且 命中≥30条且≥95%同质 → 判通配并剔除
+                # ---- ②b 同质兜底: 探针无法判定(TLS/连不通) 且 命中≥30条且≥95%同质 → 判通配并剔除
                 if (not wild) and inc and homo_weak(hits_here):
                     wild = True
                     can_codes = list(can_codes) + ["homo-backstop"]
@@ -287,7 +287,7 @@ def main():
                     manifest["pruned_total"] = int(manifest.get("pruned_total") or 0) + n
                     hits_here = [e for e in load_entries_flexible(dirscan_path)
                                  if str(e.get("Url", "")).startswith(url)]
-                    print(f"    ↳ 同质兜底: 金丝雀无法判定且命中高度同质 → 剔除 {n} 条")
+                    print(f"    ↳ 同质兜底: 探针无法判定且命中高度同质 → 剔除 {n} 条")
                 prev_hits = rec.get("hits") or 0
                 rec.update({"url": url, "hits": len(hits_here), "wildcard": wild,
                             "canary": can_codes, "canary_inconclusive": inc,
