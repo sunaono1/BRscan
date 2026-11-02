@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.DS_Store
+*.console.log
+ScanLog/
+WebScreenshot/
+*.xlsx
+!**/模板*.xlsx
+alive.txt
+dirScan.json
+dirscan_manifest.json
