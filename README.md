@@ -2,7 +2,7 @@
 
 内网安全检查工具集：**扫描工具**（全端口扫描提速、存活预筛、目录探测接续、测评结果自动梳理）+ **报告工具**（检查报告 / 授权书 / 调研表 docx 一键生成）+ **主机只读采集脚本**。
 
-从「扫描 → 目录探测 → 测评结论 → 检查报告」整条链路都有自动化脚本支撑，核心目标：**现场少返工、结论可溯源、报告一键出稿**。
+从「扫描 → 目录探测 → 测评结论 → 检查报告」整条链路都有自动化脚本支撑；报告读取/整理另有独立工具 [BRscan报告整理工具](https://github.com/sunaono1/BRscan-report-tool)，核心目标：**现场少返工、结论可溯源、报告一键出稿**。
 
 ## 目录结构
 
@@ -13,7 +13,6 @@ BRscan/
 │   ├── BRscan-alive-probe.py    # 扫描前存活预筛（ping + TCP 双重复核）
 │   ├── BRscan-dirsearch.py      # 目录探测接续驱动（随机探针拦 soft-404 / 原子写回去重 / 双轮补漏）
 │   ├── BRscan-assess.py         # 扫描报告 → 测评结论表 xlsx（确定值策略包）
-│   ├── BRscan报告整理工具.py     # 报告读取模块独立版：golin 报告 → 结构化摘要 md
 │   └── dict/
 │       ├── dir-dict.txt         # 目录探测精编字典（400 条，四主题）
 │       └── weakpass-dict.txt    # 弱口令合并字典（1203 条）
@@ -93,17 +92,6 @@ python3 scan/BRscan-assess.py <golin报告.xlsx> [--ledger 台账.txt] [--collec
 ```
 
 纪律：弱口令只记命中数量与服务类型，不抄用户/密码明文。
-
-### BRscan报告整理工具 —— 报告读取与整理
-
-报告读取模块独立版（`load_golin` / `load_flags` 与 BRscan-assess.py 同源，可单独 import 复用）：读 golin 扫描报告 xlsx + 同名 html 的扫描开关，一键整理成结构化摘要 md——概览统计 / 扫描开关 / 存活主机 / 端口按主机 / 高危与管理端口提示 / Web 站点 / PoC 命中 / 弱口令统计 / 组件指纹，九段一稿出。适合先跑它看全局，再决定往哪深挖。
-
-```bash
-python3 scan/BRscan报告整理工具.py <golin报告.xlsx>            # 默认输出同目录 报告整理_<时间戳>.md
-python3 scan/BRscan报告整理工具.py <golin报告.xlsx> --out 摘要.md --top 50   # 指定输出与每类明细行数
-```
-
-弱口令段只出「端口/模式 → 命中数」统计表，不抄用户/密码明文；摘要结尾自带「命中 ≠ 最终判定，需人工复核」注记。
 
 ## 报告工具（report/）
 
