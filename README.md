@@ -9,7 +9,7 @@
 ```
 BRscan/
 ├── scan/                        # 扫描工具
-│   ├── BRscan-fastscan.sh       # golin 全端口扫描提速封装（--time 2 --chan 3.0 --done 2）
+│   ├── BRscan-fastscan.sh       # 扫描器全端口扫描提速封装（--time 2 --chan 3.0 --done 2）
 │   ├── BRscan-alive-probe.py    # 扫描前存活预筛（ping + TCP 双重复核）
 │   ├── BRscan-dirsearch.py      # 目录探测接续驱动（随机探针拦 soft-404 / 原子写回去重 / 双轮补漏）
 │   ├── BRscan-assess.py         # 扫描报告 → 测评结论表 xlsx（确定值策略包）
@@ -33,7 +33,7 @@ BRscan/
 
 ### BRscan-fastscan.sh —— 全端口扫描提速
 
-只调 golin 命令行参数（工具本体不改）：
+只调扫描器命令行参数（工具本体不改）：
 
 - `--time 2` 丢包端口等待 5s→2s（LAN/VPN 场景 RTT 的 ~90 倍，不丢精度）
 - `--chan 3.0` 并发槽 166→624（log2(IP×端口)×CPU核数×chan）
@@ -42,7 +42,7 @@ BRscan/
 实测：整段全端口 4.4 小时 → **33.7 分钟（≈8×）**；对拍精度零漏检、241 个开放端口 0 误报。
 
 ```bash
-# 需自行放置 golin 二进制（默认 ./golin，GOLIN_BIN 可覆盖）
+# 需自行放置扫描器二进制（默认当前目录，SCAN_ENGINE_BIN 可覆盖）
 ./scan/BRscan-fastscan.sh 192.168.1.0/24              # 整段全端口
 ./scan/BRscan-fastscan.sh 192.168.1.51,192.168.1.52   # 指定主机（台账场景）
 ./scan/BRscan-fastscan.sh 192.168.1.0/24 --nocrack    # 未获口令核查书面同意时关闭弱口令
@@ -61,17 +61,17 @@ python3 scan/BRscan-alive-probe.py 192.168.1.0/24 > alive.txt
 
 ### BRscan-dirsearch.py —— 目录探测接续
 
-读 golin 扫描报告的站点清单 → 逐站跑 dirsearch → `dirScan.json` 回灌测评脚本。三道可靠性措施：
+读扫描报告的站点清单 → 逐站跑 dirsearch → `dirScan.json` 回灌测评脚本。三道可靠性措施：
 
 1. **随机探针校验**：每站先发 3 条随机路径做探针，随机路径也命中 = 通配响应（soft-404），标记跳过不进证据；
-2. **原子写回去重**：每站跑完立即解析 → 去重 → 原子写回，治 golin 并发写 `dirScan.json` 的竞态叠写/丢条；
+2. **原子写回去重**：每站跑完立即解析 → 去重 → 原子写回，治扫描器并发写 `dirScan.json` 的竞态叠写/丢条；
 3. **双轮补漏**：第 2 轮补回第 1 轮竞态丢掉的条目。
 
 实测：136 站 **11.9 分钟**，自动剔除误报 **594 条**、有效命中 108。
 
 ```bash
-python3 scan/BRscan-dirsearch.py <golin报告.xlsx>            # 默认字典 scan/dict/dir-dict.txt
-python3 scan/BRscan-dirsearch.py <golin报告.xlsx> --passes 2  # 默认即双轮
+python3 scan/BRscan-dirsearch.py <报告.xlsx>            # 默认字典 scan/dict/dir-dict.txt
+python3 scan/BRscan-dirsearch.py <报告.xlsx> --passes 2  # 默认即双轮
 ```
 
 ### BRscan-assess.py —— 测评结果自动梳理
@@ -88,7 +88,7 @@ python3 scan/BRscan-dirsearch.py <golin报告.xlsx> --passes 2  # 默认即双�
 | P-ALIGN | 证据-主题对齐：默认口令/报错页/管理页各归各的测评项 |
 
 ```bash
-python3 scan/BRscan-assess.py <golin报告.xlsx> [--ledger 台账.txt] [--collect 采集输出/] [--no-policy]
+python3 scan/BRscan-assess.py <报告.xlsx> [--ledger 台账.txt] [--collect 采集输出/] [--no-policy]
 ```
 
 纪律：弱口令只记命中数量与服务类型，不抄用户/密码明文。
@@ -124,7 +124,7 @@ powershell -ExecutionPolicy Bypass -File .\collect\BRscan-collect-windows.ps1 -O
 ## 依赖
 
 - Python 3.9+：`openpyxl`、`python-docx`
-- golin（扫描引擎，二进制不随仓库分发，`GOLIN_BIN` 指定路径）
+- 扫描引擎二进制（不随仓库分发，`SCAN_ENGINE_BIN` 指定路径）
 - Linux / macOS（扫描与采集）；Windows（采集）
 
 ## 实测成效

@@ -1,10 +1,10 @@
 #!/bin/bash
-# BRscan-fastscan.sh —— golin 全端口扫描快速执行脚本（golin 二进制原样使用，不改）
+# BRscan-fastscan.sh —— 全端口扫描快速执行脚本（扫描引擎二进制原样使用，不改）
 #
 # 用法:
 #   ./BRscan-fastscan.sh 192.168.1.0/24                      # 整段全端口
 #   ./BRscan-fastscan.sh 192.168.1.51,192.168.1.52,192.168.1.110   # 指定主机（推荐台账场景）
-#   ./BRscan-fastscan.sh SEGMENT/24 --noimg                    # 追加参数透传给 golin
+#   ./BRscan-fastscan.sh SEGMENT/24 --noimg                    # 追加参数透传给扫描引擎
 #
 # 提速三参数（2026-10-19 在 192.168.1.0/24 实测定稿，详见 docs/测速报告.md）:
 #   --time 2   丢包端口等待 5s→2s（本段 RTT 22ms，2s=RTT 的 ~90 倍，LAN/VPN 不丢精度）
@@ -13,13 +13,13 @@
 #
 # 默认全链路（弱口令+PoC+截图）；按纪律域环境或未获书面同意时追加 --nocrack 关闭弱口令。
 # 弱口令字典: 自动使用本目录 dict/weakpass-dict.txt（1203 条 = weak_top1000 + 厂商默认 50
-# + webadmin + golin 内置，由公开弱口令 Top1000 + 常见厂商默认口令合并而成）；无该文件则回退 golin 内置。
+# + webadmin + 引擎内置，由公开弱口令 Top1000 + 常见厂商默认口令合并而成）；无该文件则回退引擎内置。
 set -o pipefail
 cd "$(dirname "$0")"
-TOOL="${GOLIN_BIN:-./golin}"   # golin 二进制路径，可用环境变量 GOLIN_BIN 覆盖
+TOOL="${SCAN_ENGINE_BIN:-${GOLIN_BIN:-./golin}}"   # 扫描引擎二进制路径，可用环境变量 SCAN_ENGINE_BIN 覆盖
 
 TARGET="$1"; shift || true
-if [ -z "$TARGET" ]; then echo "用法: $0 <IP|网段|IP列表> [golin scan 追加参数...]"; exit 1; fi
+if [ -z "$TARGET" ]; then echo "用法: $0 <IP|网段|IP列表> [scan 追加参数...]"; exit 1; fi
 
 EXTRA=()
 [ -f "dict/weakpass-dict.txt" ] && EXTRA+=(--passwdfile "dict/weakpass-dict.txt")

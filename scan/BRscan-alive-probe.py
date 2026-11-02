@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""BRscan-alive-probe.py —— 全端口扫描前的存活预筛（golin --noping 12 小时陷阱的解法）。
+"""BRscan-alive-probe.py —— 全端口扫描前的存活预筛（扫描器 --noping 12 小时陷阱的解法）。
 原理: ICMP ping 扫全段；ping 不通的再用 TCP 建连探常用端口（收到 RST/SYN-ACK 都算存活）。
-输出: alive.txt（一行一个 IP，直接喂 `golin scan --ipfile alive.txt --noping`）
+输出: alive.txt（一行一个 IP，直接喂 `扫描引擎 scan --ipfile alive.txt --noping`）
 用法: python3 BRscan-alive-probe.py 192.168.1.0/24 [> alive.txt]
 精度说明: 全静默主机（不回 ICMP 且所有 TCP 也静默 DROP）无法与死主机区分，会漏出预筛；
 若客户台账已给出主机清单，优先直接用 --ipfile 台账 --noping，不需要本脚本。

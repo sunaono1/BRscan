@@ -1,36 +1,36 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""BRscan-dirsearch.py —— 把 golin dirsearch 接进「golin 扫描 → 测评结果」链
+"""BRscan-dirsearch.py —— 把目录探测接进「扫描 → 测评结果」链
 
 干什么:
-    读 golin 扫描报告 xlsx 的 WEB应用 站点清单 → 逐站执行 golin 自带 dirsearch
+    读扫描报告 xlsx 的 WEB应用 站点清单 → 逐站执行自带目录探测
     （表C 第 10/11 条口径: --code 200,301,302,403,500 --chan 50 --timeout 3）→
-    dirScan.json（golin 原生格式）+ dirscan_manifest.json（覆盖率/通配站清单）。
+    dirScan.json（引擎原生格式）+ dirscan_manifest.json（覆盖率/通配站清单）。
     跑完重跑 BRscan-assess.py，6.2-1 / 6.4-2 / 6.5-1 / 6.5-2 自动转确定值。
 
-三道可靠性措施（治 golin dirsearch 三个坑）:
+三道可靠性措施（治目录探测三个坑）:
     ① 随机探针校验: 每站先用本脚本自己发 3 条随机路径；若随机路径也命中状态码集
        → 该站为通配响应(soft-404，如 MinIO/SPA 任意路径都回 403/200) → 标记跳过，
        其响应不进证据（否则目录类条目会被灌成假"不符合"）。
-    ② 原子写回去重: golin 并发命中时读改写 dirScan.json 会竞态叠写/丢条（上游行为），
+    ② 原子写回去重: 引擎并发命中时读改写 dirScan.json 会竞态叠写/丢条（上游行为），
        每站跑完立即宽容解析 → 去重 → 原子回写（探针路径剔除）。
     ③ 双轮补漏: --passes 2（默认）整表扫两遍，第 2 轮补回第 1 轮竞态丢掉的条目。
 
 用法:
-    python3 BRscan-dirsearch.py <golin报告.xlsx> [选项]
+    python3 BRscan-dirsearch.py <报告.xlsx> [选项]
 
 选项:
     --dict PATH      字典（默认 dict/dir-dict.txt：400 条，按四个目录类条目主题精编）
-    --builtin        用 golin 内置字典（31094 条/站，数分钟一站，全量 7 小时+，慎用）
+    --builtin        用引擎内置字典（31094 条/站，数分钟一站，全量 7 小时+，慎用）
     --code LIST      状态码过滤（默认 200,301,302,403,500，同表C 第 10 条）
     --chan N         每站并发（默认 50，同表C 第 10 条）
-    --timeout N      单请求超时秒（默认 3，同 golin 默认）
+    --timeout N      单请求超时秒（默认 3，同引擎默认）
     --passes N       整表轮数（默认 2，补竞态丢失；探针判通配站跳过不重跑）
     --max N          每轮最多跑 N 个站点（调试/分批）
     --include REG    只跑 URL 匹配正则的站点
     --force          不跳过清单已完成站（默认断点续跑；通配站始终跳过）
     --out-dir DIR    dirScan.json / 清单 / 日志落盘目录（默认 = 报告 xlsx 所在目录）
-    --golin PATH     golin 可执行文件（默认脚本同目录 golin-1.2.9-darwin-arm64）
+    --engine PATH    扫描引擎可执行文件（默认脚本同目录的引擎二进制）
     --delay SEC      站点间隔（默认 0.3s）
 
 纪律: 仅对本次授权受检范围内的 Web 站点做路径探测（表C 第 10/11 条），与扫描报告同范围。
@@ -40,7 +40,7 @@ import openpyxl
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DICT = os.path.join(HERE, "字典", "目录探测字典.txt")
-DEFAULT_GOLIN = os.path.join(HERE, "golin-1.2.9-darwin-arm64")
+DEFAULT_ENGINE = os.path.join(HERE, "golin-1.2.9-darwin-arm64")
 URL_RE = re.compile(r"(https?://\S+)")
 CANARY_MARK = "/dsh-canary-"
 
@@ -156,7 +156,7 @@ def prune_url(path, url):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("xlsx", help="golin 扫描报告 xlsx")
+    ap.add_argument("xlsx", help="扫描报告 xlsx")
     ap.add_argument("--dict", dest="dict_path", default=DEFAULT_DICT)
     ap.add_argument("--builtin", action="store_true")
     ap.add_argument("--code", default="200,301,302,403,500")
@@ -169,15 +169,16 @@ def main():
     ap.add_argument("--recanary", action="store_true",
                     help="只对清单里已判非通配的站重跑探针（修复旧 bug 漏判），命中通配则原地剔除其条目后退出")
     ap.add_argument("--out-dir", default=None)
-    ap.add_argument("--golin", default=DEFAULT_GOLIN)
+    ap.add_argument("--engine", dest="engine", default=DEFAULT_ENGINE)
+    ap.add_argument("--golin", dest="engine", help=argparse.SUPPRESS, default=argparse.SUPPRESS)
     ap.add_argument("--delay", type=float, default=0.3)
     args = ap.parse_args()
 
     xlsx = os.path.abspath(args.xlsx)
     out_dir = os.path.abspath(args.out_dir) if args.out_dir else os.path.dirname(xlsx)
     os.makedirs(out_dir, exist_ok=True)
-    if not os.path.isfile(args.golin):
-        sys.exit(f"找不到 golin: {args.golin}")
+    if not os.path.isfile(args.engine):
+        sys.exit(f"找不到扫描引擎: {args.engine}")
     if not args.builtin and not os.path.isfile(args.dict_path):
         sys.exit(f"找不到字典: {args.dict_path}")
 
@@ -223,7 +224,7 @@ def main():
 
 
     print(f"Web 站点: 共 {len(targets)} 个 | 轮数 {args.passes} | 探针通配站跳过 | 断点续跑 {'关(--force)' if args.force else '开'}")
-    print(f"字典    : {'golin 内置 31094 条（--builtin）' if args.builtin else f'{args.dict_path}（{dict_paths} 条）'}"
+    print(f"字典    : {'引擎内置 31094 条（--builtin）' if args.builtin else f'{args.dict_path}（{dict_paths} 条）'}"
           f" | 状态码 {args.code} | 并发 {args.chan} | 超时 {args.timeout}s")
     print(f"落盘    : {out_dir}/dirScan.json + dirscan_manifest.json")
     print("-" * 88)
@@ -252,7 +253,7 @@ def main():
             break
         print(f"[第 {p}/{args.passes} 轮] 待跑 {len(todo)} 站 …")
         for i, url in enumerate(todo, 1):
-            # ---- ① 随机探针校验（本脚本自发, 不经过 golin, 不写任何文件）
+            # ---- ① 随机探针校验（本脚本自发, 不经过扫描引擎, 不写任何文件）
             wild, can_codes, inc = canary_check(url, codes, args.timeout)
             manifest = load_json(manifest_path, {"targets": []})
             recs = {t["url"]: t for t in manifest.get("targets", [])}
@@ -266,7 +267,7 @@ def main():
                 recs[url] = rec
                 print(f"[{i}/{len(todo)}] {url}  ⚠ 通配响应(soft-404) 探针={can_codes} → 标记跳过，响应不进证据")
             else:
-                cmd = [args.golin, "dirsearch", "--url", url, "--code", args.code,
+                cmd = [args.engine, "dirsearch", "--url", url, "--code", args.code,
                        "--chan", str(args.chan), "--timeout", str(args.timeout)]
                 if not args.builtin:
                     cmd += ["--file", os.path.abspath(args.dict_path)]

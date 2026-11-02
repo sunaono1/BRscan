@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""BRscan-assess.py —— golin 扫描报告 → 166 条清单对应测评项的建议测评结果
+"""BRscan-assess.py —— 扫描报告 → 166 条清单对应测评项的建议测评结果
 
 用法:
-    python3 BRscan-assess.py <golin报告.xlsx> [选项]
+    python3 BRscan-assess.py <报告.xlsx> [选项]
 
 选项:
     --html PATH      指定同名 html（默认自动找同目录同前缀 *.html，读取弱口令/PoC 开关）
     --map PATH       指定《测评项与命令对应表.xlsx》（默认自动定位 ../../内部支撑/）
     --ledger PATH    台账 IP 清单（一行一个，可带 # 注释）；不给则自动在 客户材料/ 里找
     --collect DIR    采集输出根目录（默认自动搜 采集输出/**/测评项_<编号>.txt）
-    --dirsearch PATH dirScan.json（golin dirsearch 产物；默认自动找 扫描输出/ 下同名文件）
+    --dirsearch PATH dirScan.json（目录探测产物；默认自动找 扫描输出/ 下同名文件）
     --public         受检范围含公网资产（默认按全部内网处理，公网类项直接 不适用）
     --no-policy      关闭"确定值策略包"，回到纯 待人工 口径
-    --out PATH       输出 xlsx（默认 BRscan-assess_<时间戳>.xlsx，落在 golin 报告同目录）
+    --out PATH       输出 xlsx（默认 BRscan-assess_<时间戳>.xlsx，落在扫描报告同目录）
 
 结论口径（与现场核查表一致，只出确定值）: 符合 / 部分符合 / 不符合 / 不适用 / 未执行
     扫描侧不能定论的加（仅扫描侧）后缀并在"备注/待补数据"写明还差什么、放哪个目录会自动转值。
@@ -81,8 +81,8 @@ def poc_cat(v):
             return cat
     return "unauth_other"
 
-# ---------------------------------------------------------------- 读取 golin 报告
-def load_golin(xlsx_path):
+# ---------------------------------------------------------------- 读取扫描报告
+def load_report(xlsx_path):
     wb = openpyxl.load_workbook(xlsx_path, data_only=True)
     data = {"ports": [], "alives": [], "vulns": [], "cracks": []}
     if "扫描端口结果" in wb.sheetnames:
@@ -165,7 +165,7 @@ def find_ledger(explicit, roots):
     return None, None
 
 def load_entries_flexible(path):
-    """宽容读取 dirScan.json：兼容 golin 并发写叠出的多文档/局部损坏；去重；剔除探针路径"""
+    """宽容读取 dirScan.json：兼容引擎并发写叠出的多文档/局部损坏；去重；剔除探针路径"""
     if not os.path.exists(path):
         return []
     raw = open(path, encoding="utf-8", errors="replace").read()
@@ -424,7 +424,7 @@ def rule_10_11(e: Evidence):
         return (f"dirsearch 已执行：命中路径 {n} 条（{e.dirscan_src}）", "符合" if n == 0 else "待人工",
                 "本项按路径关键词判定请看备注项；命中明细见 dirScan.json")
     return ("（dirsearch 未执行，结果不进扫描报告）", "未执行",
-            "跑表C 第 10/11 条（golin dirsearch）后把 dirScan.json 放 扫描输出/ 重跑本脚本即自动转值")
+            "跑表C 第 10/11 条（目录探测）后把 dirScan.json 放 扫描输出/ 重跑本脚本即自动转值")
 
 def rule_12(e: Evidence):
     if e.poc_on is False:
@@ -648,7 +648,7 @@ def evaluate_item(item, e, tabc):
         if coll_files:
             return (f"（扫描报告无此数据；采集输出已就位: {coll_files[0]}）", "待人工", "；".join(notes), cid, bid)
         if e.policy:
-            reason = ("采集输出缺失" if coll_rows else "本项数据不产自 golin 扫描报告")
+            reason = ("采集输出缺失" if coll_rows else "本项数据不产自 扫描报告")
             return ("（扫描报告无对应数据）", "未执行",
                     f"{reason}；" + "；".join(notes), cid, bid)
         return ("（扫描报告无对应数据）", "待人工", "；".join(notes), cid, bid)
@@ -708,7 +708,7 @@ def write_out(path, rows, e, tabc, n_items, extra_meta):
     gen = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     meta = [
         ("生成时间", gen),
-        ("数据来源", "golin xlsx（四表）+ html 任务开关 + 测评项与命令对应表 + 确定值策略包自动发现的台账/dirScan.json/采集输出"),
+        ("数据来源", "扫描报告 xlsx（四表）+ html 任务开关 + 测评项与命令对应表 + 确定值策略包自动发现的台账/dirScan.json/采集输出"),
         ("结论口径", "符合 / 部分符合 / 不符合 / 不适用 / 未执行 —— 只出确定值；扫描侧不能定论的加（仅扫描侧）后缀，缺失证据写明还差什么、放哪个目录会自动转值"),
         ("策略 P-SCOPE", "受检目标全部 RFC1918 私网 → 公网依赖项判 不适用（范围含公网加 --public）"),
         ("策略 P-LEDGER", "台账来源：%s；台账外资产→不符合、无差集→符合、台账未随案→未执行" % (extra_meta.get("ledger_src") or "未发现（放 客户材料/ 或 --ledger 指定即自动生效）")),
@@ -729,7 +729,7 @@ def write_out(path, rows, e, tabc, n_items, extra_meta):
         ("管理口集合", ", ".join(sorted(MGMT_PORTS, key=lambda x: int(x)))),
         ("条目规则", "；".join(f"表C 第 {k} 条→{fn.__name__}" for k, fn in sorted(RULES.items(), key=lambda x: x[0]) if fn)),
         ("测评项级策略", "；".join(f"{k}→{fn.__name__}" for k, fn in ITEM_RULE.items())),
-        ("覆盖", f"清单 166 条中含表C(golin)引用的 {n_items} 条已逐一给出确定值建议结果；其余为访谈/表B 上机项，不归扫描报告管"),
+        ("覆盖", f"清单 166 条中含表C引用的 {n_items} 条已逐一给出确定值建议结果；其余为访谈/表B 上机项，不归扫描报告管"),
         ("弱口令纪律", "只记命中数量与服务类型，不抄用户/密码明文（表C 执行纪律④）"),
     ]
     for k, v in meta:
@@ -742,7 +742,7 @@ def write_out(path, rows, e, tabc, n_items, extra_meta):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("xlsx", help="golin 扫描报告 xlsx")
+    ap.add_argument("xlsx", help="扫描报告 xlsx")
     ap.add_argument("--html", default=None)
     ap.add_argument("--map", dest="mapx", default=None)
     ap.add_argument("--ledger", default=None)
@@ -773,7 +773,7 @@ def main():
     if not mpath or not os.path.exists(mpath):
         sys.exit("找不到《测评项与命令对应表.xlsx》，用 --map 指定")
 
-    d = load_golin(args.xlsx)
+    d = load_report(args.xlsx)
     crack_on, poc_on = load_flags(html)
     items, tabc = load_map(mpath)
 
@@ -793,8 +793,8 @@ def main():
             dirscan = kept
         if not dirscan_excluded and dirmanifest:
             dirscan_excluded = int(dirmanifest.get("pruned_total") or 0)   # 驱动侧已剔除的累计数
-    golin_ids = [it["id"] for it in items if parse_src(it["src"])[0]]
-    collect_files = find_collect_files(args.collect, roots, golin_ids) if policy else {}
+    src_ids = [it["id"] for it in items if parse_src(it["src"])[0]]
+    collect_files = find_collect_files(args.collect, roots, src_ids) if policy else {}
 
     hosts = set(d["alives"]) | {h for h, _, _ in d["ports"]}
     def is_private(ip):
@@ -806,7 +806,7 @@ def main():
                  collect_files, internal, args.public, policy, dirmanifest=dirmanifest,
                  wildcard_n=wildcard_n, dirscan_excluded=dirscan_excluded)
 
-    print(f"golin报告: {os.path.basename(args.xlsx)}")
+    print(f"扫描报告: {os.path.basename(args.xlsx)}")
     print(f"html开关 : 口令扫描={crack_on} 漏洞扫描={poc_on} ({os.path.basename(html) if html else '未找到'})")
     print(f"数据     : 存活 {len(e.alives)} 台 | 开放 {len(e.ports)} 口 | PoC {len(e.vulns)} | 弱口令 {len(e.cracks)} | 指纹 {len(e.fingerprints())}")
     print(f"策略包   : {'开' if policy else '关'} | 范围={'全内网→公网项不适用' if internal and not args.public else '含公网/--public'} | "
@@ -815,12 +815,12 @@ def main():
              if dirmanifest else "") + f" | 采集文件={sum(1 for v in collect_files.values() if v)} 项")
     print("-" * 88)
 
-    rows, n_golin = [], 0
+    rows, n_src = [], 0
     for it in items:
         cid, bid = parse_src(it["src"])
         if not cid:
             continue
-        n_golin += 1
+        n_src += 1
         实测, 结论, 备注, cid, bid = evaluate_item(it, e, tabc)
         tabctxt = "、".join(f"第 {c} 条" for c in cid) or "—"
         rows.append([it["id"], it["domain"], it["level"], it["text"], f"表C {tabctxt}", 实测, 结论, 备注])
@@ -833,10 +833,10 @@ def main():
     if tally.get("待人工"):
         print(f"⚠ 仍有 {tally['待人工']} 条待人工（见备注里的「还差什么」）")
     out = args.out or os.path.join(xdir, f"BRscan-assess_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
-    write_out(out, rows, e, tabc, n_golin,
+    write_out(out, rows, e, tabc, n_src,
               {"ledger_src": ledger_src, "dirscan_src": dirscan_src,
                "dirmanifest_src": dirmanifest_src})
-    print(f"覆盖 {n_golin} 条 golin 归口测评项 → {out}")
+    print(f"覆盖 {n_src} 条归口测评项 → {out}")
 
 if __name__ == "__main__":
     main()
